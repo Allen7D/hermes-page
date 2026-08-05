@@ -29,9 +29,12 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
 .accent-btn{padding:4px 12px;border-radius:12px;border:1px solid #d0d5dd;background:white;font-size:13px;color:#646a73;cursor:pointer}
 .accent-btn.active{background:#1677FF;color:white;border-color:#1677FF}
 .example-box{background:#fafafa;border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:left}
+.example-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .example-en{font-size:14px;color:#1f2329;line-height:1.6;font-style:italic}
 .example-zh{font-size:13px;color:#8f959e;margin-top:4px}
-.example-label{font-size:11px;color:#c9cdd4;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.example-label{font-size:11px;color:#c9cdd4;text-transform:uppercase;letter-spacing:.5px}
+.ex-speak-btn{background:none;border:1px solid #e5e6eb;border-radius:12px;padding:3px 10px;font-size:12px;color:#646a73;cursor:pointer}
+.ex-speak-btn:active{background:#f5f6f7}
 .actions{display:flex;gap:10px;justify-content:center}
 .btn{padding:10px 24px;border-radius:10px;font-size:15px;border:none;cursor:pointer}
 .btn:active{opacity:.7}
@@ -93,7 +96,7 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
   var statusEl = document.createElement("div"); statusEl.className = "status";
   var speakBtn = document.createElement("button"); speakBtn.className = "speak-btn"; speakBtn.textContent = "\ud83d\udd0a 播放发音";
   var exBox = document.createElement("div"); exBox.className = "example-box";
-  exBox.innerHTML = '<div class="example-label">生活例句</div><div class="example-en" id="exEn"></div><div class="example-zh" id="exZh"></div>';
+  exBox.innerHTML = '<div class="example-header"><span class="example-label">生活例句</span><button class="ex-speak-btn" id="exSpeakBtn">🔊 播放例句</button></div><div class="example-en" id="exEn"></div><div class="example-zh" id="exZh"></div>';
   var actions = document.createElement("div"); actions.className = "actions";
   var btnMaster = document.createElement("button"); btnMaster.className = "btn btn-master"; btnMaster.textContent = "\u2705 已掌握";
   var btnReview = document.createElement("button"); btnReview.className = "btn btn-review"; btnReview.textContent = "\ud83d\udd04 再练";
@@ -161,6 +164,16 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
     a.play().catch(function(){});
   }
 
+  function speakExample() {
+    if (!window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    var w = filtered[currentIdx];
+    var text = w.example || w.en;
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US"; u.rate = 0.85;
+    speechSynthesis.speak(u);
+  }
+
   function next() {
     if (currentIdx < filtered.length - 1) { currentIdx++; render(); speak(); }
   }
@@ -196,6 +209,7 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
 
   // ====== 事件绑定 ======
   speakBtn.addEventListener("click", speak);
+  document.getElementById("exSpeakBtn").addEventListener("click", speakExample);
   btnMaster.addEventListener("click", function(){mark("mastered")});
   btnReview.addEventListener("click", function(){mark("learning")});
   prevBtn.addEventListener("click", prev);
