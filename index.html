@@ -165,13 +165,20 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
   }
 
   function speakExample() {
-    if (!window.speechSynthesis) return;
-    speechSynthesis.cancel();
     var w = filtered[currentIdx];
     var text = w.example || w.en;
-    var u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-US"; u.rate = 0.85;
-    speechSynthesis.speak(u);
+    // 优先 Google TTS（真人发音），失败回退 Web Speech API
+    var url = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" + encodeURIComponent(text);
+    var a = new Audio(url);
+    a.onerror = function() {
+      // Google 不可用，回退浏览器 TTS
+      if (!window.speechSynthesis) return;
+      speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = "en-US"; u.rate = 0.85;
+      speechSynthesis.speak(u);
+    };
+    a.play().catch(function(){});
   }
 
   function next() {
