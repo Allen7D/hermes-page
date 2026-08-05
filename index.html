@@ -25,6 +25,9 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
 .status.new{background:#fff3e0;color:#ff8f1f}
 .speak-btn{display:inline-flex;align-items:center;gap:4px;background:#f0f5ff;color:#1677FF;border:none;border-radius:20px;padding:8px 18px;font-size:15px;cursor:pointer;margin-bottom:16px}
 .speak-btn:active{background:#d6e4ff}
+.accent-switch{display:flex;justify-content:center;gap:8px;margin-bottom:12px}
+.accent-btn{padding:4px 12px;border-radius:12px;border:1px solid #d0d5dd;background:white;font-size:13px;color:#646a73;cursor:pointer}
+.accent-btn.active{background:#1677FF;color:white;border-color:#1677FF}
 .example-box{background:#fafafa;border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:left}
 .example-en{font-size:14px;color:#1f2329;line-height:1.6;font-style:italic}
 .example-zh{font-size:13px;color:#8f959e;margin-top:4px}
@@ -102,6 +105,11 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
   card.appendChild(zhEl);
   card.appendChild(statusEl);
   card.appendChild(speakBtn);
+  var accentSwitch = document.createElement("div"); accentSwitch.className = "accent-switch";
+  var btnUS = document.createElement("button"); btnUS.className = "accent-btn active"; btnUS.textContent = "美式"; btnUS.dataset.type = "0";
+  var btnUK = document.createElement("button"); btnUK.className = "accent-btn"; btnUK.textContent = "英式"; btnUK.dataset.type = "1";
+  accentSwitch.appendChild(btnUS); accentSwitch.appendChild(btnUK);
+  card.appendChild(accentSwitch);
   card.appendChild(exBox);
   card.appendChild(actions);
   area.innerHTML = "";
@@ -143,12 +151,14 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
     nextBtn.disabled = currentIdx === filtered.length - 1;
   }
 
+  var accentType = "0"; // 0=美式, 1=英式
+
   function speak() {
-    if (!window.speechSynthesis) return;
-    speechSynthesis.cancel();
-    var u = new SpeechSynthesisUtterance(filtered[currentIdx].en);
-    u.lang = "en-US"; u.rate = 0.9;
-    speechSynthesis.speak(u);
+    var w = filtered[currentIdx];
+    var audioWord = w.en.toLowerCase().replace(/\s+/g, "");
+    var url = "https://dict.youdao.com/dictvoice?type=" + accentType + "&audio=" + encodeURIComponent(audioWord);
+    var a = new Audio(url);
+    a.play().catch(function(){});
   }
 
   function next() {
@@ -190,6 +200,8 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
   btnReview.addEventListener("click", function(){mark("learning")});
   prevBtn.addEventListener("click", prev);
   nextBtn.addEventListener("click", next);
+  btnUS.addEventListener("click", function(){ accentType = "0"; btnUS.classList.add("active"); btnUK.classList.remove("active"); speak(); });
+  btnUK.addEventListener("click", function(){ accentType = "1"; btnUK.classList.add("active"); btnUS.classList.remove("active"); speak(); });
   var fbs = document.querySelectorAll(".filter-btn");
   for (var i = 0; i < fbs.length; i++) {
     fbs[i].addEventListener("click", function(){
