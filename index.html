@@ -165,11 +165,13 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;just
   }
 
   function speakExample() {
+    if (!window.speechSynthesis) return;
+    speechSynthesis.cancel();
     var w = filtered[currentIdx];
     var text = w.example || w.en;
-    var url = "https://dict.youdao.com/dictvoice?type=" + accentType + "&audio=" + encodeURIComponent(text);
-    var a = new Audio(url);
-    a.play().catch(function(){});
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US"; u.rate = 0.85;
+    speechSynthesis.speak(u);
   }
 
   function next() {
