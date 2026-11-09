@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Swarm MVP — 拆成蓝图，再盖一遍</title>
+<style>
+  /* ========== 0. 假装这是一个"真实的网页" ========== */
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f5f4ef; color: #1c1b18; }
+  .page { max-width: 680px; margin: 48px auto; padding: 0 24px; }
+  h1 { font-size: 34px; margin: 0 0 12px; }
+  .lede { color: #6b6a63; font-size: 16px; margin: 0 0 28px; }
+  .card { background: #fff; border: 1px solid #e3e1d8; border-radius: 14px;
+          padding: 22px 24px; margin: 18px 0; box-shadow: 0 3px 10px rgba(40,35,20,.07); }
+  .card h2 { margin: 0 0 6px; font-size: 19px; }
+  .card p  { margin: 0 0 14px; color: #55534b; font-size: 14px; }
+  .price { font-size: 22px; font-weight: 700; color: #ff5a1f; display: inline-block; margin-right: 14px; }
+  .btn { background: #ff5a1f; color: #fff; border: 0; border-radius: 9px;
+         padding: 10px 18px; font-size: 14px; cursor: pointer; }
+
+  /* ========== 控制台（不属于被拆的页面） ========== */
+  #panel { position: fixed; top: 14px; right: 14px; z-index: 100000; width: 310px;
+           background: #14130f; color: #eee; border-radius: 12px; padding: 14px;
+           font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+  #panel h3 { margin: 0 0 10px; font-size: 13px; color: #ffb38a; letter-spacing: .5px; }
+  #panel button { display: block; width: 100%; margin: 6px 0; padding: 8px 10px;
+                  border: 0; border-radius: 8px; background: #2c2a24; color: #eee;
+                  font-size: 13px; cursor: pointer; text-align: left; }
+  #panel button:hover { background: #3a372e; }
+  #panel button.primary { background: #ff5a1f; color: #fff; }
+  #status { margin-top: 8px; color: #9b9788; min-height: 16px; }
+  #blueprint { max-height: 34vh; overflow: auto; background: #0c0b09; border-radius: 8px;
+               padding: 8px; margin-top: 8px; font: 11px/1.5 ui-monospace, Consolas, monospace;
+               color: #b8b4a4; white-space: pre; display: none; }
+</style>
+</head>
+<body>
+
+<!-- 被拆的"真页面" -->
+<div class="page" id="stage">
+  <h1>一杯咖啡的哲学</h1>
+  <p class="lede">一个假装很正经的落地页。它存在的意义，就是待会儿被一群光标拆掉再盖一遍。</p>
+
+  <div class="card">
+    <h2>手冲单品 · 耶加雪菲</h2>
+    <p>柑橘与茉莉花香，浅烘，水洗处理。</p>
+    <span class="price">¥ 42</span><button class="btn">加入购物车</button>
+  </div>
+
+  <div class="card">
+    <h2>意式拼配 · 深烘</h2>
+    <p>巧克力与焦糖，油脂丰厚，适合加奶。</p>
+    <span class="price">¥ 28</span><button class="btn">加入购物车</button>
+  </div>
+</div>
+
+<!-- 控制台 -->
+<div id="panel">
+  <h3>SWARM MVP · 控制台</h3>
+  <button class="primary" id="bAll">一键全流程（快照 → 幕布 → 重建 → 揭幕）</button>
+  <button id="b1">1. 快照：DOM → 蓝图</button>
+  <button id="b2">2. 盖幕布（shadow root 隔离）</button>
+  <button id="b3">3. 重建：光标施工</button>
+  <button id="b4">4. 揭幕（Go live）</button>
+  <button id="bReset">重置（刷新）</button>
+  <div id="status">点「一键全流程」，或分步按 1 → 2 → 3 → 4。</div>
+  <div id="blueprint"></div>
+</div>
+
+<script>
+/* ============================================================
+ * STEP 1 —— 快照：遍历 DOM，产出"施工蓝图"
+ *
+ * 每个节点被归类成两种任务：
+ *   rect : 一个盒子（位置 / 尺寸 / 背景 / 圆角 / 边框 / 阴影）
+ *   text : 一段文字（内容 / 字体 / 颜色）
+ *
+ * 这一步只"读"，一个像素都不画。
+ * 读的是 getBoundingClientRect + getComputedStyle —— 结构，不是截图。
+ * ========================================================== */
+function snapshot(rootEl) {
+  const tasks = [];
+
+  const pushText = (textNode) => {
+    const s = textNode.textContent.trim();
+    if (!s) return;
+    const range = document.createRange();
+    range.selectNodeContents(textNode);
+    const r = range.getBoundingClientRect();          // 文字块的精确位置
+    const cs = getComputedStyle(textNode.parentElement);
+    tasks.push({
+      type: 'text',
+      x: r.x, y: r.y, w: r.width, h: r.height,
+      text: s,
+      color: cs.color,
+      font: `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`,
+    });
+  };
+
+  // 深度优先：父盒子先入队，子元素后入队 —— 施工顺序天然正确
+  (function walk(el) {
+    for (const node of el.childNodes) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const r = node.getBoundingClientRect();
+        const cs = getComputedStyle(node);
+        // 完全透明的容器（h1、p 本身）不值得画，跳过；真项目里几乎所有元素都入队
+        const painted = cs.backgroundColor !== 'rgba(0, 0, 0, 0)'
+                     || cs.borderTopWidth !== '0px'
+                     || cs.boxShadow !== 'none';
+        if (painted) {
+          tasks.push({
+            type: 'rect',
+            x: r.x, y: r.y, w: r.width, h: r.height,
+            bg: cs.backgroundColor,
+            radius: cs.borderRadius,
+            border: cs.borderTopWidth !== '0px'
+              ? `${cs.borderTopWidth} solid ${cs.borderTopColor}` : null,
+            shadow: cs.boxShadow !== 'none' ? cs.boxShadow : null,
+          });
+        }
+        walk(node);
+      } else if (node.nodeType === Node.TEXT_NODE) {
+        pushText(node);
+      }
+    }
+  })(rootEl);
+
+  return tasks;
+}
+
+/* ============================================================
+ * STEP 2 —— 幕布：全屏 shadow root，把"重建世界"与页面 CSS 隔离
+ *
+ * 幕布里的元素只认快照到的内联样式，不继承页面任何样式表。
+ * 原页面在幕布底下，原封不动。
+ * ========================================================== */
+function cover(bg = '#faf8f3') {
+  const host = document.createElement('div');
+  host.id = 'curtain-host';
+  host.style.cssText =
+    `position:fixed;inset:0;z-index:9999;background:${bg};transition:opacity .6s;`;
+
+  const shadow = host.attachShadow({ mode: 'open' });   // ← 隔离的关键
+
+  // 光标自己的样式也要带进来 —— 页面 CSS 在 shadow root 里一律失效
+  const style = document.createElement('style');
+  style.textContent = `
+    .swarm-cursor { position:absolute; left:0; top:0; z-index:10; pointer-events:none;
+      transition: left .22s ease-out, top .22s ease-out; }
+    .swarm-cursor .tag { position:absolute; left:14px; top:16px; padding:2px 7px;
+      border-radius:4px; font:11px system-ui; color:#fff; white-space:nowrap; }
+  `;
+  shadow.appendChild(style);
+
+  const layer = document.createElement('div');
+  layer.style.cssText = 'position:absolute;inset:0;overflow:hidden;';
+  shadow.appendChild(layer);
+
+  document.body.appendChild(host);
+  return { host, layer };
+}
+
+/* ============================================================
+ * STEP 3 —— 重建引擎：几个光标（worker）从蓝图队列里抢任务
+ *
+ *   rect → 拖拽式画框：灰占位框从 0 长到 w×h，再"上漆"
+ *   text → 打字机：逐字敲出来
+ *
+ * 真项目里还有：钢笔线条、参考线、⌥-拖副本、WebGL 截图、音效……
+ * ========================================================== */
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const raf  = () => new Promise(r => requestAnimationFrame(r));
+
+function makeCursor(layer, name, color) {
+  const c = document.createElement('div');
+  c.className = 'swarm-cursor';
+  c.innerHTML =
+    `<svg width="18" height="20" viewBox="0 0 18 20">
+       <path d="M1 1 L1 15.5 L5.2 11.8 L8 18.5 L10.6 17.3 L7.9 10.8 L13.6 10.8 Z"
+             fill="${color}" stroke="#fff" stroke-width="1.2"></path>
+     </svg><span class="tag" style="background:${color}">${name}</span>`;
+  layer.appendChild(c);
+  return c;
+}
+
+const moveTo = async (c, x, y) => {
+  c.style.left = x + 'px';
+  c.style.top  = y + 'px';
+  await sleep(180 + Math.random() * 140);   // 停顿一下，像真人移动鼠标
+};
+
+async function drawRect(layer, t) {
+  const el = document.createElement('div');
+  // 先出现灰色占位框（对应真项目的 gray placeholder）
+  el.style.cssText = `position:absolute;left:${t.x}px;top:${t.y}px;
+    width:0;height:0;background:rgba(0,0,0,.08);
+    transition:width .26s ease-out,height .26s ease-out,opacity .2s;opacity:0;`;
+  layer.appendChild(el);
+  await raf();
+  el.style.opacity = 1;
+  el.style.width  = t.w + 'px';
+  el.style.height = t.h + 'px';
+  await sleep(300);
+  // "上漆"：换成快照时的真实样式
+  el.style.background  = t.bg;
+  el.style.borderRadius = t.radius;
+  if (t.border) el.style.border    = t.border;
+  if (t.shadow) el.style.boxShadow = t.shadow;
+  await sleep(160);
+}
+
+async function typeText(layer, t) {
+  const el = document.createElement('div');
+  el.style.cssText = `position:absolute;left:${t.x}px;top:${t.y}px;
+    max-width:${Math.max(t.w, 40)}px;font:${t.font};color:${t.color};
+    white-space:pre-wrap;`;
+  el.textContent = '';
+  layer.appendChild(el);
+  for (const ch of t.text) {          // 打字机
+    el.textContent += ch;
+    await sleep(26);
+  }
+  await sleep(80);
+}
+
+async function rebuild(layer, tasks, onProgress) {
+  const colors = ['#ff5a1f', '#1f7aff', '#0aa860'];
+  const cursors = colors.map((col, i) => makeCursor(layer, `${i + 1}号工`, col));
+  const queue = [...tasks];
+  let done = 0;
+
+  const work = async (cursor) => {
+    while (queue.length) {
+      const t = queue.shift();
+      if (!t) break;
+      await moveTo(cursor, t.x + t.w / 2, t.y + t.h / 2);
+      if (t.type === 'rect') await drawRect(layer, t);
+      else                   await typeText(layer, t);
+      done++; onProgress && onProgress(done, tasks.length);
+    }
+  };
+  await Promise.all(cursors.map(work));
+
+  // 收工：光标聚拢（真项目是 flocking，追着你的鼠标跑）
+  cursors.forEach(c => { c.style.left = innerWidth / 2 + 'px'; c.style.top = innerHeight / 2 + 'px'; });
+}
+
+/* ============================================================
+ * STEP 4 —— 揭幕：撤掉幕布，露出底下一直没动过的真页面
+ * ========================================================== */
+
+/* ============================================================
+ * 控制台逻辑：把四步串起来
+ * ========================================================== */
+const $ = (id) => document.getElementById(id);
+const state = { tasks: null, curtain: null, building: false };
+const setStatus = (s) => { $('status').textContent = s; };
+
+// 证明"底下是真页面"：真按钮可以点
+document.querySelectorAll('.btn').forEach(b =>
+  b.addEventListener('click', () => { b.textContent = '已加入 ✓'; }));
+
+$('b1').onclick = () => {
+  state.tasks = snapshot($('stage'));
+  const rectN = state.tasks.filter(t => t.type === 'rect').length;
+  const textN = state.tasks.length - rectN;
+  const bp = $('blueprint');
+  bp.style.display = 'block';
+  bp.textContent = JSON.stringify(state.tasks.slice(0, 3), null, 2)
+    + `\n… 共 ${state.tasks.length} 条任务（rect ${rectN} / text ${textN}）`;
+  setStatus(`快照完成：${state.tasks.length} 条任务已排队。页面本体一个像素没动。`);
+};
+
+$('b2').onclick = () => {
+  state.curtain = cover();
+  setStatus('幕布已盖上：原页面在底下，之后的一切发生在 shadow root 里。');
+};
+
+$('b3').onclick = async () => {
+  if (state.building) return;
+  if (!state.tasks)  $('b1').onclick();
+  if (!state.curtain) state.curtain = cover();
+  state.building = true;
+  await rebuild(state.curtain.layer, state.tasks,
+    (d, n) => setStatus(`施工中…… ${d}/${n}`));
+  state.building = false;
+  setStatus('完工。光标已聚拢。按 4 揭幕。');
+};
+
+$('b4').onclick = () => {
+  if (!state.curtain) return setStatus('还没盖幕布，揭什么。');
+  state.curtain.host.style.opacity = 0;
+  setTimeout(() => { state.curtain.host.remove(); state.curtain = null; }, 650);
+  setStatus('幕布撤掉 —— 底下一直是原页面，活的、可点击的。试试点「加入购物车」。');
+};
+
+$('bAll').onclick = async () => {
+  $('b1').onclick(); await sleep(400);
+  $('b2').onclick(); await sleep(500);
+  await $('b3').onclick();
+  await sleep(600);
+  $('b4').onclick();
+};
+
+$('bReset').onclick = () => location.reload();
+</script>
+</body>
+</html>
